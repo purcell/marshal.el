@@ -107,8 +107,7 @@
                      (object-p . eieio-object-p)
                      (oref . eieio-oref)
                      (oset . eieio-oset)
-                     (call-next-method . cl-call-next-method)
-                     (object-slots . eieio-class-slots)))
+                     (call-next-method . cl-call-next-method)))
     (unless (fboundp (cdr mapping))
       (fset (cdr mapping) (car mapping))))
 
@@ -336,7 +335,7 @@
          (marshal-info (cdr (assoc type (marshal-get-marshal-info obj)))))
     (marshal-open driver)
     (when marshal-info
-      (dolist (s (eieio-class-slots obj))
+      (dolist (s (object-slots obj))
         (let ((path (cdr (assoc s marshal-info))))
           (when (and path
                      (slot-boundp obj s))
@@ -375,7 +374,7 @@
         (marshal-info (cdr (assoc type (marshal-get-marshal-info obj)))))
     (marshal-open driver blob)
     (when (and marshal-info blob)
-      (dolist (s (eieio-class-slots obj))
+      (dolist (s (object-slots obj))
         (let ((path (cdr (assoc s marshal-info))))
           (when path
             (eieio-oset obj s
