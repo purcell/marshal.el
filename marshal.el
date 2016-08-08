@@ -101,20 +101,25 @@
 (require 'eieio)
 (require 'ht)
 
-;;; eieio backward-compatibility
-(dolist (sym '(object-class object-p oref oset))
-  (let ((new-sym (intern (concat "eieio-" (symbol-name sym)))))
-    (unless (fboundp new-sym)
-      (fset new-sym sym))))
+(eval-and-compile
+  ;;; eieio backward-compatibility
+  (dolist (mapping '((object-class . eieio-object-class)
+                     (object-p . eieio-object-p)
+                     (oref . eieio-oref)
+                     (oset . eieio-oset)
+                     (call-next-method . cl-call-next-method)
+                     (object-slots . eieio-class-slots)))
+    (unless (fboundp (cdr mapping))
+      (fset (cdr mapping) (car mapping))))
 
-;;; json hotfix
-(when (json-alist-p '(((foo))))
-  (defun json-alist-p (list)
-    (while (consp list)
-      (setq list (if (and (consp (car list)) (atom (caar list)))
-                     (cdr list)
-                   'not-alist)))
-    (null list)))
+  ;;; json hotfix
+  (when (json-alist-p '(((foo))))
+    (defun json-alist-p (list)
+      (while (consp list)
+        (setq list (if (and (consp (car list)) (atom (caar list)))
+                       (cdr list)
+                     'not-alist)))
+      (null list))))
 
 ;;; Defined drivers
 
@@ -144,7 +149,7 @@
 
 (defmethod marshal-close ((obj marshal-driver))
   (when (slot-boundp obj :output)
-    (oref obj :output)))
+    (eieio-oref obj :output)))
 
 (defmethod marshal-guess-type :static ((obj marshal-driver) blob)
   (cond ((null blob) nil)
@@ -185,7 +190,7 @@
   (equal b t))
 
 (defmethod marshal-unmarshal-list :static ((obj marshal-driver) l l-type)
-  (let ((type (or (and (object-p obj) (eieio-object-class obj))
+  (let ((type (or (and (eieio-object-p obj) (eieio-object-class obj))
                   obj)))
     (cons (unmarshal-internal (when (consp l-type)
                                 (cadr l-type))
@@ -194,13 +199,13 @@
 
 (defmethod marshal-marshal-list :static ((obj marshal-driver) l)
   (unless (null l)
-    (let ((type (or (and (object-p obj) (eieio-object-class obj))
+    (let ((type (or (and (eieio-object-p obj) (eieio-object-class obj))
                     obj)))
       (cons (marshal-internal (car l) type)
             (marshal-internal (cdr l) type)))))
 
 (defmethod marshal-unmarshal-hash :static ((obj marshal-driver) h h-type)
-  (let ((type (or (and (object-p obj) (eieio-object-class obj))
+  (let ((type (or (and (eieio-object-p obj) (eieio-object-class obj))
                   obj))
         (k-type (when (consp h-type) (nth 1 h-type)))
         (v-type (when (consp h-type) (nth 2 h-type))))
@@ -211,7 +216,7 @@
 
 (defmethod marshal-marshal-hash :static ((obj marshal-driver) h)
   (unless (ht-empty? h)
-    (let ((type (or (and (object-p obj) (eieio-object-class obj))
+    (let ((type (or (and (eieio-object-p obj) (eieio-object-class obj))
                     obj)))
       (mapcar (lambda (item)
                 (cons (marshal-internal (car item) type)
@@ -224,12 +229,12 @@
   ())
 
 (defmethod marshal-write ((obj marshal-driver-alist) path value)
-  (call-next-method)
+  (cl-call-next-method)
   (object-add-to-list obj :output (cons path value)))
 
 (defmethod marshal-read ((obj marshal-driver-alist) path)
-  (call-next-method)
-  (cdr (assoc path (oref obj :input))))
+  (cl-call-next-method)
+  (cdr (assoc path (eieio-oref obj :input))))
 
 ;;; json driver
 
@@ -239,10 +244,10 @@
 (defmethod marshal-preprocess ((obj marshal-driver-json) blob)
   (let ((json-array-type 'list)
         (json-object-type 'alist))
-    (json-read-from-string (call-next-method))))
+    (json-read-from-string (cl-call-next-method))))
 
 (defmethod marshal-postprocess ((obj marshal-driver-json) blob)
-  (json-encode (call-next-method)))
+  (json-encode (cl-call-next-method)))
 
 (defmethod marshal-unmarshal-bool :static ((obj marshal-driver-json) b)
   (not (eq b json-false)))
@@ -256,12 +261,12 @@
   ())
 
 (defmethod marshal-write ((obj marshal-driver-plist) path value)
-  (call-next-method)
-  (oset obj :output (plist-put (oref obj :output) path value)))
+  (cl-call-next-method)
+  (oset obj :output (plist-put (eieio-oref obj :output) path value)))
 
 (defmethod marshal-read ((obj marshal-driver-plist) path)
-  (call-next-method)
-  (plist-get (oref obj :input) path))
+  (cl-call-next-method)
+  (plist-get (eieio-oref obj :input) path))
 
 ;;; helper functions
 
@@ -331,7 +336,7 @@
          (marshal-info (cdr (assoc type (marshal-get-marshal-info obj)))))
     (marshal-open driver)
     (when marshal-info
-      (dolist (s (object-slots obj))
+      (dolist (s (eieio-class-slots obj))
         (let ((path (cdr (assoc s marshal-info))))
           (when (and path
                      (slot-boundp obj s))
@@ -370,7 +375,7 @@
         (marshal-info (cdr (assoc type (marshal-get-marshal-info obj)))))
     (marshal-open driver blob)
     (when (and marshal-info blob)
-      (dolist (s (object-slots obj))
+      (dolist (s (eieio-class-slots obj))
         (let ((path (cdr (assoc s marshal-info))))
           (when path
             (eieio-oset obj s
